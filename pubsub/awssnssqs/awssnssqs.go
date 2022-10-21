@@ -675,6 +675,7 @@ func (t *sqsTopic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 			}
 			req.Entries = append(req.Entries, entry)
 			if dm.BeforeSend != nil {
+				fmt.Printf("SendBatchBefore!!: %+v\n", entry)
 				asFunc := func(i interface{}) bool {
 					if p, ok := i.(*sqstypesv2.SendMessageBatchRequestEntry); ok {
 						*p = entry
@@ -685,6 +686,7 @@ func (t *sqsTopic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 				if err := dm.BeforeSend(asFunc); err != nil {
 					return err
 				}
+				fmt.Printf("SendBatch!!: %+v\n", entry)
 			}
 		}
 		resp, err := t.clientV2.SendMessageBatch(ctx, req)
