@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"firebase.google.com/go/v4/messaging"
+	"go.uber.org/zap"
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/pubsub"
 	"gocloud.dev/pubsub/batcher"
@@ -28,6 +29,7 @@ type TopicOptions struct {
 	BacherOptions *batcher.Options
 	MetricService countMetricInterface
 	Tags          []string
+	Logger        *zap.Logger
 }
 
 type fcmTopic struct {
@@ -86,11 +88,31 @@ func (t *fcmTopic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 		resp, err = t.client.SendAll(ctx, entries)
 	}
 	if err != nil {
+		t.opts.Logger.Error("Error from response entity", zap.String("from", "pubsub.firebase.sendBatch.response"), zap.Error(err))
 		return err
 	}
 
 	if resp.FailureCount > 0 {
 		t.opts.MetricService.Count("firebase.message.sendBatch.failure", int64(resp.FailureCount), t.opts.Tags...)
+	}
+
+	for n, dm := range dms {
+		respEntity := resp.Responses[n]
+		if respEntity.Success && dm.AfterSend != nil {
+			asFunc := func(i interface{}) bool {
+				if p, ok := i.(**messaging.SendResponse); ok {
+					*p = resp.Responses[n]
+					return true
+				}
+				return false
+			}
+			if err := dm.AfterSend(asFunc); err != nil {
+				return err
+			}
+		}
+		if respEntity.Error != nil {
+			t.opts.Logger.Error("Error from response entity", zap.String("from", "pubsub.firebase.sendBatch.resposneEntity"), zap.Error(respEntity.Error))
+		}
 	}
 
 	if resp.SuccessCount == len(dms) {
