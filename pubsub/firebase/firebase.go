@@ -3,6 +3,7 @@ package firebase
 import (
 	"context"
 	"errors"
+	"time"
 
 	"firebase.google.com/go/v4/messaging"
 	"gocloud.dev/gcerrors"
@@ -12,6 +13,7 @@ import (
 )
 
 type countMetricInterface interface {
+	Timing(stat string, duration time.Duration, tagKvs ...string)
 	Count(stat string, count int64, tagKvs ...string)
 }
 
@@ -23,9 +25,9 @@ var sendBatchOpts = &batcher.Options{
 type TopicOptions struct {
 	DryRun bool
 
-	BacherOptions      *batcher.Options
-	CountMetricService countMetricInterface
-	Tags               []string
+	BacherOptions *batcher.Options
+	MetricService countMetricInterface
+	Tags          []string
 }
 
 type fcmTopic struct {
@@ -52,6 +54,10 @@ func openFCMTopic(ctx context.Context, client *messaging.Client, opts *TopicOpti
 }
 
 func (t *fcmTopic) SendBatch(ctx context.Context, dms []*driver.Message) error {
+	now := time.Now()
+	defer func() {
+		t.opts.MetricService.Timing("firebase.messagine.sendBatch.latency", time.Since(now), t.opts.Tags...)
+	}()
 	entries := make([]*messaging.Message, 0, len(dms))
 	for _, dm := range dms {
 		entry := &messaging.Message{}
@@ -84,7 +90,7 @@ func (t *fcmTopic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 	}
 
 	if resp.FailureCount > 0 {
-		t.opts.CountMetricService.Count("firebase.message.failure", int64(resp.FailureCount), t.opts.Tags...)
+		t.opts.MetricService.Count("firebase.message.sendBatch.failure", int64(resp.FailureCount), t.opts.Tags...)
 	}
 
 	if resp.SuccessCount == len(dms) {
