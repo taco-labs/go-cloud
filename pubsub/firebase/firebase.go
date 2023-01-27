@@ -87,6 +87,7 @@ func (t *fcmTopic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 	} else {
 		resp, err = t.client.SendAll(ctx, entries)
 	}
+
 	if err != nil {
 		t.opts.Logger.Error("Error from response entity", zap.String("from", "pubsub.firebase.sendBatch.response"), zap.Error(err))
 		return err
@@ -111,7 +112,12 @@ func (t *fcmTopic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 			}
 		}
 		if respEntity.Error != nil {
-			t.opts.Logger.Error("Error from response entity", zap.String("from", "pubsub.firebase.sendBatch.resposneEntity"), zap.Error(respEntity.Error))
+			t.opts.Logger.Error(
+				"Error from response entity",
+				zap.String("from", "pubsub.firebase.sendBatch.resposneEntity"),
+				zap.Error(respEntity.Error),
+				zap.Any("requestEntity", entries[n]),
+				zap.Any("responseEntity", respEntity))
 		}
 	}
 
